@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Sun Simulation</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Arial', sans-serif;
+            background: #000;
+            overflow: hidden;
+            color: white;
+        }
+
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 165, 0, 0.3);
+        }
+
+        button {
+            display: block;
+            width: 180px;
+            padding: 10px;
+            margin: 10px 0;
+            background: linear-gradient(135deg, #ff6b00, #ff9500);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        button:hover {
+            background: linear-gradient(135deg, #ff8c00, #ffb500);
+            transform: scale(1.05);
+        }
+
+        button.active {
+            background: linear-gradient(135deg, #ff4500, #ff6500);
+            box-shadow: 0 0 10px rgba(255, 100, 0, 0.5);
+        }
+
+        #info {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            max-width: 300px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 165, 0, 0.3);
+            z-index: 100;
+            display: none;
+        }
+
+        #info h3 {
+            color: #ff9500;
+            margin-top: 0;
+        }
+
+        #info p {
+            font-size: 14px;
+            line-height: 1.5;
+            margin: 10px 0;
+        }
+
+        .label3d {
+            position: absolute;
+            padding: 5px 10px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid #ff9500;
+            border-radius: 5px;
+            font-size: 12px;
+            cursor: pointer;
+            z-index: 50;
+            display: none;
+        }
+
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 20px;
+            color: #ff9500;
+        }
+
+        #textureInfo {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 165, 0, 0.3);
+            z-index: 100;
+            max-width: 400px;
+        }
+
+        #textureInfo h4 {
+            color: #ff9500;
+            margin-top: 0;
+        }
+
+        #textureInfo a {
+            color: #ffb500;
+            text-decoration: none;
+        }
+
+        #textureInfo a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="loading">Initializing Sun Simulation...</div>
+
+    <div id="controls">
+        <h3 style="margin-top: 0; color: #ff9500;">Sun Controls</h3>
+        <button id="labelToggle">Get Labels</button>
+        <button id="crossSection">Activate Cross Section</button>
+        <button id="rotateToggle">Toggle Rotation</button>
+        <button id="resetView">Reset View</button>
+    </div>
+
+    <div id="info">
+        <h3>Layer Info</h3>
+        <p id="layerInfo"></p>
+    </div>
+
+    <div id="textureInfo">
+        <h4>🌟 Interactive Features</h4>
+        <p style="font-size: 13px;">
+            In this simulation, you can:
+            <br>• Enable Cross-Section Mode to reveal the Sun’s inner layers (core, radiative, convective zones,
+            etc.).
+            <br>• Drag or swipe to adjust the cross-section angle when in Cross-Section Mode.
+            <br>• Stop the automatic rotation for a stable learning view using Rotation Toggle.
+            <br>• Toggle <b>Labels Mode</b> to display educational tags connected to each solar layer.
+        </p>
+
+        <p style="font-size: 11px; color: #888;">
+            ⚠️ <b>BioBizarre Disclaimer:</b> This project is designed as an interactive educational model.
+            It is not a full scientific simulation of the Sun. For real astrophysics data, refer to
+            <a href="https://science.nasa.gov/sun/" target="_blank">NASA</a> and
+            <a href="https://www.esa.int/Science_Exploration/Space_Science/SOHO" target="_blank">SOHO</a>.
+        </p>
+
+    </div>
+
+    <div class="label3d" id="coreLabel">Core</div>
+    <div class="label3d" id="radiativeLabel">Radiative Zone</div>
+    <div class="label3d" id="convectiveLabel">Convective Zone</div>
+    <div class="label3d" id="photosphereLabel">Photosphere</div>
+    <div class="label3d" id="chromosphereLabel">Chromosphere</div>
+    <div class="label3d" id="coronaLabel">Corona</div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        let scene, camera, renderer;
+        let sunGroup, coreMesh, radiativeMesh, convectiveMesh, photosphereMesh, chromosphereMesh, coronaMesh;
+        let labels = [];
+        let crossSectionGroup;
+        let isRotating = true;
+        let showLabels = false;
+        let showCrossSection = false;
+        let raycaster, mouse;
+        let coronaParticles;
+        let time = 0;
+        let infoTimeout;
+        let lastTouchX = 0, lastTouchY = 0;
+        let isTouching = false;
+        let isDragging = false;
+        let previousMouseX = 0, previousMouseY = 0;
+
+        const layerInfo = {
+            core: {
+                title: "Core",
+                description: "Temperature: 15 million °C. The sun's nuclear fusion reactor where hydrogen converts to helium, releasing enormous energy. Extends from center to 20-25% of solar radius.",
+                color: 0xffffff
+            },
+            radiative: {
+                title: "Radiative Zone",
+                description: "Temperature: 7 to 2 million °C. Energy travels outward through radiation. Photons take 170,000 years to pass through this zone. Extends from 25% to 70% of solar radius.",
+                color: 0xffee88
+            },
+            convective: {
+                title: "Convective Zone",
+                description: "Temperature: 2 million to 5,800 °C. Hot plasma rises and cool plasma descends in convection cells. Extends from 70% to 100% of solar radius.",
+                color: 0xffaa33
+            },
+            photosphere: {
+                title: "Photosphere",
+                description: "Temperature: 5,800 °C. The visible surface of the sun where sunspots appear. Only about 400 km thick. This is what we see from Earth.",
+                color: 0xffdd00
+            },
+            chromosphere: {
+                title: "Chromosphere",
+                description: "Temperature: 4,500 to 20,000 °C. Visible as a red rim during solar eclipses. About 2,000 km thick. Source of solar prominences.",
+                color: 0xff6600
+            },
+            corona: {
+                title: "Corona",
+                description: "Temperature: 1-3 million °C. The sun's outer atmosphere extending millions of kilometers into space. Source of solar wind and visible during total eclipses.",
+                color: 0xffaa88
+            }
+        };
+
+        function init() {
+            // Scene setup
+            scene = new THREE.Scene();
+
+            // Camera setup
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 0, 3);
+
+            // Renderer setup
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild(renderer.domElement);
+
+            // Raycaster for interaction
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            // Ambient light
+            const ambientLight = new THREE.AmbientLight(0x111111);
+            scene.add(ambientLight);
+
+            // Create sun group
+            sunGroup = new THREE.Group();
+            scene.add(sunGroup);
+
+            // Create cross section group
+            crossSectionGroup = new THREE.Group();
+            crossSectionGroup.visible = false;
+            scene.add(crossSectionGroup);
+
+            createSun();
+            createCrossSection();
+            createCoronaParticles();
+            createStarfield();
+
+            // Mouse and touch controls
+            let mouseX = 0, mouseY = 0;
+            let targetX = 0, targetY = 0;
+
+            document.addEventListener('mousemove', (event) => {
+                mouseX = (event.clientX - window.innerWidth / 2) / 100;
+                mouseY = (event.clientY - window.innerHeight / 2) / 100;
+                mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            });
+
+            // Drag controls for cross-section
+            document.addEventListener('mousedown', (event) => {
+                if (showCrossSection) {
+                    isDragging = true;
+                    previousMouseX = event.clientX;
+                    previousMouseY = event.clientY;
+                }
+            });
+
+            document.addEventListener('mousemove', (event) => {
+                if (isDragging && showCrossSection) {
+                    const deltaX = event.clientX - previousMouseX;
+                    const deltaY = event.clientY - previousMouseY;
+                    crossSectionGroup.rotation.y += deltaX * 0.005;
+                    crossSectionGroup.rotation.x += deltaY * 0.005;
+                    previousMouseX = event.clientX;
+                    previousMouseY = event.clientY;
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+            });
+
+            // Touch events for mobile
+            document.addEventListener('touchstart', (event) => {
+                if (event.touches.length === 1) {
+                    isTouching = true;
+                    lastTouchX = event.touches[0].clientX;
+                    lastTouchY = event.touches[0].clientY;
+                    mouse.x = (lastTouchX / window.innerWidth) * 2 - 1;
+                    mouse.y = -(lastTouchY / window.innerHeight) * 2 + 1;
+                    if (showCrossSection) {
+                        isDragging = true;
+                        previousMouseX = lastTouchX;
+                        previousMouseY = lastTouchY;
+                    }
+                }
+            });
+
+            document.addEventListener('touchmove', (event) => {
+                if (event.touches.length === 1) {
+                    event.preventDefault();
+                    const touchX = event.touches[0].clientX;
+                    const touchY = event.touches[0].clientY;
+                    mouseX = (touchX - window.innerWidth / 2) / 100;
+                    mouseY = (touchY - window.innerHeight / 2) / 100;
+                    mouse.x = (touchX / window.innerWidth) * 2 - 1;
+                    mouse.y = -(touchY / window.innerHeight) * 2 + 1;
+
+                    if (isDragging && showCrossSection) {
+                        const deltaX = touchX - previousMouseX;
+                        const deltaY = touchY - previousMouseY;
+                        crossSectionGroup.rotation.y += deltaX * 0.005;
+                        crossSectionGroup.rotation.x += deltaY * 0.005;
+                        previousMouseX = touchX;
+                        previousMouseY = touchY;
+                    }
+
+                    lastTouchX = touchX;
+                    lastTouchY = touchY;
+                }
+            }, { passive: false });
+
+            document.addEventListener('touchend', () => {
+                isTouching = false;
+                isDragging = false;
+            });
+
+            // Controls
+            document.getElementById('labelToggle').addEventListener('click', toggleLabels);
+            document.getElementById('crossSection').addEventListener('click', toggleCrossSection);
+            document.getElementById('rotateToggle').addEventListener('click', toggleRotation);
+            document.getElementById('resetView').addEventListener('click', resetView);
+
+            // Add click and touch handlers for labels
+            const labelElements = document.querySelectorAll('.label3d');
+            labelElements.forEach(label => {
+                label.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    const layerKey = label.id.replace('Label', '').toLowerCase();
+                    const info = layerInfo[layerKey];
+                    if (info) {
+                        showLayerInfo(info);
+                    }
+                });
+                label.addEventListener('touchstart', (event) => {
+                    event.stopPropagation();
+                    event.preventDefault();
+                    const layerKey = label.id.replace('Label', '').toLowerCase();
+                    const info = layerInfo[layerKey];
+                    if (info) {
+                        showLayerInfo(info);
+                    }
+                });
+            });
+
+            // Document click/touch handler to hide info panel
+            document.addEventListener('click', (event) => {
+                const infoPanel = document.getElementById('info');
+                const isClickInsideInfo = infoPanel.contains(event.target);
+                const isClickOnLabel = Array.from(labelElements).some(label => label.contains(event.target));
+
+                if (!isClickInsideInfo && !isClickOnLabel) {
+                    hideLayerInfo();
+                }
+            });
+
+            document.addEventListener('touchstart', (event) => {
+                const infoPanel = document.getElementById('info');
+                const isTouchInsideInfo = infoPanel.contains(event.target);
+                const isTouchOnLabel = Array.from(labelElements).some(label => label.contains(event.target));
+
+                if (!isTouchInsideInfo && !isTouchOnLabel) {
+                    hideLayerInfo();
+                }
+            });
+
+            // Hide loading
+            document.getElementById('loading').style.display = 'none';
+
+            // Animation loop
+            function animate() {
+                requestAnimationFrame(animate);
+                time += 0.01;
+
+                // Smooth camera movement
+                targetX += (mouseX - targetX) * 0.05;
+                targetY += (mouseY - targetY) * 0.05;
+
+                if (!showCrossSection) {
+                    camera.position.x = targetX * 0.5;
+                    camera.position.y = targetY * 0.5;
+                }
+
+                camera.lookAt(scene.position);
+
+                // Rotate sun
+                if (isRotating && !isDragging) {
+                    sunGroup.rotation.y += 0.002;
+                    crossSectionGroup.rotation.y += 0.002;
+                }
+
+                // Animate corona
+                animateCorona();
+                animateCoronaParticles();
+
+                // Update labels
+                if (showLabels) {
+                    updateLabels();
+                }
+
+                renderer.render(scene, camera);
+            }
+
+            animate();
+        }
+
+        function showLayerInfo(info) {
+            const infoPanel = document.getElementById('info');
+            const layerInfoElement = document.getElementById('layerInfo');
+            layerInfoElement.innerHTML = `
+                <strong>${info.title}</strong><br>
+                ${info.description}
+            `;
+            infoPanel.style.display = 'block';
+
+            if (infoTimeout) {
+                clearTimeout(infoTimeout);
+            }
+
+            infoTimeout = setTimeout(() => {
+                hideLayerInfo();
+            }, 4000);
+        }
+
+        function hideLayerInfo() {
+            const infoPanel = document.getElementById('info');
+            const layerInfoElement = document.getElementById('layerInfo');
+            if (showLabels) {
+                infoPanel.style.display = 'block';
+                layerInfoElement.innerHTML = '';
+            } else {
+                infoPanel.style.display = 'none';
+            }
+            if (infoTimeout) {
+                clearTimeout(infoTimeout);
+            }
+        }
+
+        function createSun() {
+            const coreGeometry = new THREE.SphereGeometry(0.25, 32, 32);
+            const coreMaterial = new THREE.MeshPhongMaterial({
+                color: 0xffffff,
+                emissive: 0xffffff,
+                emissiveIntensity: 2,
+                transparent: true,
+                opacity: 0.9
+            });
+            coreMesh = new THREE.Mesh(coreGeometry, coreMaterial);
+            sunGroup.add(coreMesh);
+
+            const radiativeGeometry = new THREE.SphereGeometry(0.7, 32, 32);
+            const radiativeMaterial = new THREE.MeshPhongMaterial({
+                color: 0xffee88,
+                emissive: 0xffee88,
+                emissiveIntensity: 1.5,
+                transparent: true,
+                opacity: 0.3
+            });
+            radiativeMesh = new THREE.Mesh(radiativeGeometry, radiativeMaterial);
+            sunGroup.add(radiativeMesh);
+
+            const convectiveGeometry = new THREE.SphereGeometry(1.0, 64, 64);
+            const convectiveMaterial = new THREE.MeshPhongMaterial({
+                color: 0xffaa33,
+                emissive: 0xffaa33,
+                emissiveIntensity: 1.2,
+                transparent: true,
+                opacity: 0.4
+            });
+            convectiveMesh = new THREE.Mesh(convectiveGeometry, convectiveMaterial);
+            sunGroup.add(convectiveMesh);
+
+            const photosphereGeometry = new THREE.SphereGeometry(1.02, 128, 128);
+            const photosphereTexture = createProceduralSunTexture();
+            const photosphereMaterial = new THREE.MeshPhongMaterial({
+                map: photosphereTexture,
+                emissive: 0xffdd00,
+                emissiveIntensity: 0.8,
+                bumpMap: photosphereTexture,
+                bumpScale: 0.01,
+                normalMap: createNormalMap(),
+                normalScale: new THREE.Vector2(0.5, 0.5),
+                specularMap: createSpecularMap(),
+                shininess: 50
+            });
+            photosphereMesh = new THREE.Mesh(photosphereGeometry, photosphereMaterial);
+            sunGroup.add(photosphereMesh);
+
+            const chromosphereGeometry = new THREE.SphereGeometry(1.1, 64, 64);
+            const chromosphereMaterial = new THREE.MeshPhongMaterial({
+                color: 0xff6600,
+                emissive: 0xff6600,
+                emissiveIntensity: 0.6,
+                transparent: true,
+                opacity: 0.2
+            });
+            chromosphereMesh = new THREE.Mesh(chromosphereGeometry, chromosphereMaterial);
+            sunGroup.add(chromosphereMesh);
+
+            const coronaGeometry = new THREE.SphereGeometry(1.5, 32, 32);
+            const coronaMaterial = new THREE.ShaderMaterial({
+                uniforms: {
+                    time: { value: 0 },
+                    intensity: { value: 1.0 }
+                },
+                vertexShader: `
+                    varying vec3 vNormal;
+                    varying vec3 vPosition;
+                    
+                    void main() {
+                        vNormal = normalize(normalMatrix * normal);
+                        vPosition = position;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform float time;
+                    uniform float intensity;
+                    varying vec3 vNormal;
+                    varying vec3 vPosition;
+                    
+                    void main() {
+                        float fresnel = pow(1.0 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.0);
+                        float noise = sin(vPosition.x * 10.0 + time) * cos(vPosition.y * 10.0 + time * 0.5) * 0.5 + 0.5;
+                        vec3 color = mix(vec3(1.0, 0.6, 0.3), vec3(1.0, 0.4, 0.1), noise);
+                        float alpha = fresnel * intensity * (0.3 + noise * 0.2);
+                        gl_FragColor = vec4(color, alpha);
+                    }
+                `,
+                transparent: true,
+                side: THREE.DoubleSide,
+                blending: THREE.AdditiveBlending
+            });
+            coronaMesh = new THREE.Mesh(coronaGeometry, coronaMaterial);
+            sunGroup.add(coronaMesh);
+
+            const sunLight = new THREE.PointLight(0xffdd00, 2, 100);
+            sunLight.position.set(0, 0, 0);
+            sunGroup.add(sunLight);
+        }
+
+        function createProceduralSunTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1024;
+            canvas.height = 1024;
+            const ctx = canvas.getContext('2d');
+
+            // Base gradient for the photosphere
+            const gradient = ctx.createRadialGradient(512, 512, 0, 512, 512, 512);
+            gradient.addColorStop(0, '#fff5e6');
+            gradient.addColorStop(0.4, '#ffdd99');
+            gradient.addColorStop(0.8, '#ffaa33');
+            gradient.addColorStop(1, '#ff6600');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 1024, 1024);
+
+            // Add sunspots
+            for (let i = 0; i < 30; i++) {
+                const x = Math.random() * 1024;
+                const y = Math.random() * 1024;
+                const size = Math.random() * 30 + 10;
+                const opacity = Math.random() * 0.4 + 0.2;
+                ctx.beginPath();
+                ctx.arc(x, y, size, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(50, 20, 0, ${opacity})`;
+                ctx.fill();
+
+                // Add penumbra (softer edge around sunspots)
+                const penumbraSize = size * 1.5;
+                const penumbraGradient = ctx.createRadialGradient(x, y, size, x, y, penumbraSize);
+                penumbraGradient.addColorStop(0, `rgba(50, 20, 0, ${opacity * 0.5})`);
+                penumbraGradient.addColorStop(1, 'rgba(50, 20, 0, 0)');
+                ctx.beginPath();
+                ctx.arc(x, y, penumbraSize, 0, Math.PI * 2);
+                ctx.fillStyle = penumbraGradient;
+                ctx.fill();
+            }
+
+            // Add granulation
+            for (let i = 0; i < 2000; i++) {
+                const x = Math.random() * 1024;
+                const y = Math.random() * 1024;
+                const size = Math.random() * 4 + 2;
+                const brightness = Math.random() * 50 + 200;
+                ctx.beginPath();
+                ctx.arc(x, y, size, 0, Math.PI * 2);
+                ctx.fillStyle = `rgb(${brightness}, ${brightness * 0.85}, ${brightness * 0.5})`;
+                ctx.fill();
+            }
+
+            // Add subtle flares
+            for (let i = 0; i < 10; i++) {
+                const x = Math.random() * 1024;
+                const y = Math.random() * 1024;
+                const flareSize = Math.random() * 50 + 20;
+                const flareGradient = ctx.createRadialGradient(x, y, 0, x, y, flareSize);
+                flareGradient.addColorStop(0, 'rgba(255, 255, 200, 0.8)');
+                flareGradient.addColorStop(1, 'rgba(255, 255, 200, 0)');
+                ctx.beginPath();
+                ctx.arc(x, y, flareSize, 0, Math.PI * 2);
+                ctx.fillStyle = flareGradient;
+                ctx.fill();
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.needsUpdate = true;
+            return texture;
+        }
+
+        function createNormalMap() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1024;
+            canvas.height = 1024;
+            const ctx = canvas.getContext('2d');
+
+            // Base neutral normal map (purple)
+            ctx.fillStyle = 'rgb(128, 128, 255)';
+            ctx.fillRect(0, 0, 1024, 1024);
+
+            // Add granulation for surface texture
+            for (let i = 0; i < 2000; i++) {
+                const x = Math.random() * 1024;
+                const y = Math.random() * 1024;
+                const size = Math.random() * 4 + 2;
+                const normalStrength = Math.random() * 0.5 + 0.5;
+                const normalGradient = ctx.createRadialGradient(x, y, 0, x, y, size);
+                normalGradient.addColorStop(0, `rgba(100, 100, 255, ${normalStrength})`);
+                normalGradient.addColorStop(1, 'rgba(128, 128, 255, 0)');
+                ctx.beginPath();
+                ctx.arc(x, y, size, 0, Math.PI * 2);
+                ctx.fillStyle = normalGradient;
+                ctx.fill();
+            }
+
+            // Add sunspots to normal map
+            for (let i = 0; i < 30; i++) {
+                const x = Math.random() * 1024;
+                const y = Math.random() * 1024;
+                const size = Math.random() * 30 + 10;
+                const normalStrength = Math.random() * 0.3 + 0.2;
+                ctx.beginPath();
+                ctx.arc(x, y, size, 0, Math.PI * 2);
+                ctx.fillStyle = `rgb(100, 100, ${255 - normalStrength * 50})`;
+                ctx.fill();
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.needsUpdate = true;
+            return texture;
+        }
+
+        function createSpecularMap() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1024;
+            canvas.height = 1024;
+            const ctx = canvas.getContext('2d');
+
+            // Base specular map (dark)
+            ctx.fillStyle = 'rgb(20, 20, 20)';
+            ctx.fillRect(0, 0, 1024, 1024);
+
+            // Add shiny spots for granulation
+            for (let i = 0; i < 2000; i++) {
+                const x = Math.random() * 1024;
+                const y = Math.random() * 1024;
+                const size = Math.random() * 4 + 2;
+                const specStrength = Math.random() * 0.5 + 0.5;
+                ctx.beginPath();
+                ctx.arc(x, y, size, 0, Math.PI * 2);
+                ctx.fillStyle = `rgb(${specStrength * 100}, ${specStrength * 100}, ${specStrength * 100})`;
+                ctx.fill();
+            }
+
+            // Add flares to specular map
+            for (let i = 0; i < 10; i++) {
+                const x = Math.random() * 1024;
+                const y = Math.random() * 1024;
+                const flareSize = Math.random() * 50 + 20;
+                const flareGradient = ctx.createRadialGradient(x, y, 0, x, y, flareSize);
+                flareGradient.addColorStop(0, 'rgb(200, 200, 200)');
+                flareGradient.addColorStop(1, 'rgb(20, 20, 20)');
+                ctx.beginPath();
+                ctx.arc(x, y, flareSize, 0, Math.PI * 2);
+                ctx.fillStyle = flareGradient;
+                ctx.fill();
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.needsUpdate = true;
+            return texture;
+        }
+
+        function createCrossSection() {
+            const materials = [
+                new THREE.MeshPhongMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 2 }),
+                new THREE.MeshPhongMaterial({ color: 0xffee88, emissive: 0xffee88, emissiveIntensity: 1.5, transparent: true, opacity: 0.7 }),
+                new THREE.MeshPhongMaterial({ color: 0xffaa33, emissive: 0xffaa33, emissiveIntensity: 1.2, transparent: true, opacity: 0.7 }),
+                new THREE.MeshPhongMaterial({ color: 0xffdd00, emissive: 0xffdd00, emissiveIntensity: 0.8, map: createProceduralSunTexture(), normalMap: createNormalMap(), normalScale: new THREE.Vector2(0.5, 0.5), specularMap: createSpecularMap(), shininess: 50 }),
+                new THREE.MeshPhongMaterial({ color: 0xff6600, emissive: 0xff6600, emissiveIntensity: 0.6, transparent: true, opacity: 0.5 }),
+                new THREE.MeshPhongMaterial({ color: 0xffaa88, emissive: 0xffaa88, emissiveIntensity: 0.4, transparent: true, opacity: 0.3 })
+            ];
+
+            const radii = [0.25, 0.7, 1.0, 1.02, 1.1, 1.5];
+
+            radii.forEach((radius, index) => {
+                const geometry = new THREE.SphereGeometry(radius, 32, 32, 0, Math.PI);
+                const mesh = new THREE.Mesh(geometry, materials[index]);
+                mesh.rotation.y = Math.PI / 2;
+                crossSectionGroup.add(mesh);
+            });
+        }
+
+        function createCoronaParticles() {
+            const particleCount = 1000;
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(particleCount * 3);
+            const velocities = new Float32Array(particleCount * 3);
+            const sizes = new Float32Array(particleCount);
+            const initialPositions = new Float32Array(particleCount * 3);
+
+            for (let i = 0; i < particleCount; i++) {
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(2 * Math.random() - 1);
+                const radius = 1.2 + Math.random() * 0.8;
+
+                positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+                positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+                positions[i * 3 + 2] = radius * Math.cos(phi);
+
+                initialPositions[i * 3] = positions[i * 3];
+                initialPositions[i * 3 + 1] = positions[i * 3 + 1];
+                initialPositions[i * 3 + 2] = positions[i * 3 + 2];
+
+                const velScale = 0.005;
+                velocities[i * 3] = positions[i * 3] * velScale;
+                velocities[i * 3 + 1] = positions[i * 3 + 1] * velScale;
+                velocities[i * 3 + 2] = positions[i * 3 + 2] * velScale;
+
+                sizes[i] = Math.random() * 2 + 1;
+            }
+
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+            geometry.setAttribute('initialPosition', new THREE.BufferAttribute(initialPositions, 3));
+
+            const material = new THREE.PointsMaterial({
+                color: 0xffaa00,
+                size: 0.015,
+                transparent: true,
+                opacity: 0.7,
+                blending: THREE.AdditiveBlending
+            });
+
+            coronaParticles = new THREE.Points(geometry, material);
+            coronaParticles.userData.velocities = velocities;
+            sunGroup.add(coronaParticles);
+        }
+
+        function animateCoronaParticles() {
+            if (!coronaParticles) return;
+
+            const positions = coronaParticles.geometry.attributes.position.array;
+            const velocities = coronaParticles.userData.velocities;
+            const initialPositions = coronaParticles.geometry.attributes.initialPosition.array;
+
+            for (let i = 0; i < positions.length / 3; i++) {
+                const waveFreq = 2.0;
+                const waveAmp = 0.1;
+                const baseRadius = Math.sqrt(
+                    initialPositions[i * 3] ** 2 +
+                    initialPositions[i * 3 + 1] ** 2 +
+                    initialPositions[i * 3 + 2] ** 2
+                );
+
+                const wave = Math.sin(time * waveFreq + i) * waveAmp;
+                const currentRadius = baseRadius + wave;
+
+                const scale = currentRadius / baseRadius;
+                positions[i * 3] = initialPositions[i * 3] * scale + velocities[i * 3];
+                positions[i * 3 + 1] = initialPositions[i * 3 + 1] * scale + velocities[i * 3 + 1];
+                positions[i * 3 + 2] = initialPositions[i * 3 + 2] * scale + velocities[i * 3 + 2];
+
+                const distance = Math.sqrt(
+                    positions[i * 3] ** 2 +
+                    positions[i * 3 + 1] ** 2 +
+                    positions[i * 3 + 2] ** 2
+                );
+
+                if (distance > 2.5 || distance < 1.1) {
+                    const theta = Math.random() * Math.PI * 2;
+                    const phi = Math.acos(2 * Math.random() - 1);
+                    const radius = 1.2 + Math.random() * 0.3;
+
+                    positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+                    positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+                    positions[i * 3 + 2] = radius * Math.cos(phi);
+
+                    initialPositions[i * 3] = positions[i * 3];
+                    initialPositions[i * 3 + 1] = positions[i * 3 + 1];
+                    initialPositions[i * 3 + 2] = positions[i * 3 + 2];
+
+                    const velScale = 0.005;
+                    velocities[i * 3] = positions[i * 3] * velScale;
+                    velocities[i * 3 + 1] = positions[i * 3 + 1] * velScale;
+                    velocities[i * 3 + 2] = positions[i * 3 + 2] * velScale;
+                }
+            }
+
+            coronaParticles.geometry.attributes.position.needsUpdate = true;
+        }
+
+        function createStarfield() {
+            const starsGeometry = new THREE.BufferGeometry();
+            const starCount = 5000;
+            const positions = new Float32Array(starCount * 3);
+
+            for (let i = 0; i < starCount * 3; i += 3) {
+                const radius = 50 + Math.random() * 450;
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.random() * Math.PI;
+
+                positions[i] = radius * Math.sin(phi) * Math.cos(theta);
+                positions[i + 1] = radius * Math.sin(phi) * Math.sin(theta);
+                positions[i + 2] = radius * Math.cos(phi);
+            }
+
+            starsGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+            const starsMaterial = new THREE.PointsMaterial({
+                color: 0xffffff,
+                size: 0.5,
+                transparent: true,
+                opacity: 0.8
+            });
+
+            const stars = new THREE.Points(starsGeometry, starsMaterial);
+            scene.add(stars);
+        }
+
+        function animateCorona() {
+            if (coronaMesh && coronaMesh.material.uniforms) {
+                coronaMesh.material.uniforms.time.value = time;
+                coronaMesh.material.uniforms.intensity.value = 0.8 + Math.sin(time * 2) * 0.2;
+            }
+        }
+
+        function toggleLabels() {
+            showLabels = !showLabels;
+            document.getElementById('labelToggle').classList.toggle('active');
+
+            const labelElements = document.querySelectorAll('.label3d');
+            if (showLabels) {
+                document.getElementById('info').style.display = 'block';
+                labelElements.forEach(label => label.style.display = 'block');
+            } else {
+                document.getElementById('info').style.display = 'none';
+                labelElements.forEach(label => label.style.display = 'none');
+            }
+        }
+
+        function toggleCrossSection() {
+            showCrossSection = !showCrossSection;
+            document.getElementById('crossSection').classList.toggle('active');
+
+            if (showCrossSection) {
+                sunGroup.visible = false;
+                crossSectionGroup.visible = true;
+                camera.position.set(2, 1, 3);
+                // Reset rotation to initial state
+                crossSectionGroup.rotation.set(0, Math.PI / 2, 0);
+            } else {
+                sunGroup.visible = true;
+                crossSectionGroup.visible = false;
+                camera.position.set(0, 0, 3);
+                isDragging = false; // Ensure dragging stops when exiting cross-section mode
+            }
+        }
+
+        function toggleRotation() {
+            isRotating = !isRotating;
+            document.getElementById('rotateToggle').classList.toggle('active');
+        }
+
+        function resetView() {
+            camera.position.set(0, 0, 3);
+            camera.lookAt(0, 0, 0);
+            sunGroup.rotation.set(0, 0, 0);
+            crossSectionGroup.rotation.set(0, Math.PI / 2, 0);
+            isDragging = false;
+        }
+
+        function updateLabels() {
+            const labels = [
+                { element: 'coreLabel', position: new THREE.Vector3(0, 0, 0), info: layerInfo.core },
+                { element: 'radiativeLabel', position: new THREE.Vector3(0.5, 0, 0), info: layerInfo.radiative },
+                { element: 'convectiveLabel', position: new THREE.Vector3(0.8, 0, 0), info: layerInfo.convective },
+                { element: 'photosphereLabel', position: new THREE.Vector3(1.0, 0, 0), info: layerInfo.photosphere },
+                { element: 'chromosphereLabel', position: new THREE.Vector3(1.1, 0.3, 0), info: layerInfo.chromosphere },
+                { element: 'coronaLabel', position: new THREE.Vector3(1.3, 0.5, 0), info: layerInfo.corona }
+            ];
+
+            labels.forEach(label => {
+                const vector = label.position.clone();
+                // Use crossSectionGroup matrix in cross-section mode, otherwise use sunGroup
+                const group = showCrossSection ? crossSectionGroup : sunGroup;
+                vector.applyMatrix4(group.matrixWorld);
+                vector.project(camera);
+
+                const x = (vector.x * 0.5 + 0.5) * window.innerWidth;
+                const y = (vector.y * -0.5 + 0.5) * window.innerHeight;
+
+                const element = document.getElementById(label.element);
+                element.style.left = x + 'px';
+                element.style.top = y + 'px';
+            });
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        init();
+    </script>
+</body>
+
+</html>
