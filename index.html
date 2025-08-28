@@ -20,10 +20,16 @@
             left: 20px;
             z-index: 100;
             background: rgba(0, 0, 0, 0.7);
-            padding: 20px;
+            padding: 10px;
             border-radius: 10px;
             border: 1px solid rgba(255, 165, 0, 0.3);
-            opacity: 0.6;
+            opacity: 0.9;
+        }
+
+        #controlButtons {
+            display: none;
+            /* Hidden by default */
+            padding: 10px;
         }
 
         button {
@@ -105,7 +111,8 @@
             border: 1px solid rgba(255, 165, 0, 0.3);
             z-index: 100;
             max-width: 400px;
-            display: none; /* Hidden by default */
+            display: none;
+            /* Hidden by default */
         }
 
         #textureInfo h4 {
@@ -127,8 +134,19 @@
             bottom: 20px;
             right: 20px;
             z-index: 100;
-            opacity: 0.7;
+            opacity: 0.8;
         }
+
+        #controlsToggle {
+            width: 180px;
+            margin: 0;
+            background: none;
+            border: none;
+
+        }
+        #controlsToggle:hover {
+            background: linear-gradient(135deg, #ff6b00, #ff9500);
+        } 
     </style>
 </head>
 
@@ -136,11 +154,14 @@
     <div id="loading">Initializing Sun Simulation...</div>
 
     <div id="controls">
-        <h3 style="margin-top: 0; color: #ff9500;">Sun Controls</h3>
-        <button id="labelToggle">Get Labels</button>
-        <button id="crossSection">Activate Cross Section</button>
-        <button id="rotateToggle">Toggle Rotation</button>
-        <button id="resetView">Reset View</button>
+        <button id="controlsToggle">Sun Controls</button>
+        <div id="controlButtons">
+
+            <button id="labelToggle">Get Labels</button>
+            <button id="crossSection">Activate Cross Section</button>
+            <button id="rotateToggle">Toggle Rotation</button>
+            <button id="resetView">Reset View</button>
+        </div>
     </div>
 
     <div id="info">
@@ -194,6 +215,7 @@
         let isDragging = false;
         let previousMouseX = 0, previousMouseY = 0;
         let showTextureInfo = false;
+        let showControls = false;
 
         const layerInfo = {
             core: {
@@ -347,6 +369,7 @@
             });
 
             // Controls
+            document.getElementById('controlsToggle').addEventListener('click', toggleControls);
             document.getElementById('labelToggle').addEventListener('click', toggleLabels);
             document.getElementById('crossSection').addEventListener('click', toggleCrossSection);
             document.getElementById('rotateToggle').addEventListener('click', toggleRotation);
@@ -466,6 +489,14 @@
             if (infoTimeout) {
                 clearTimeout(infoTimeout);
             }
+        }
+
+        function toggleControls() {
+            showControls = !showControls;
+            const controlButtons = document.getElementById('controlButtons');
+            const controlsToggle = document.getElementById('controlsToggle');
+            controlButtons.style.display = showControls ? 'block' : 'none';
+            controlsToggle.classList.toggle('active', showControls);
         }
 
         function toggleTextureInfo() {
