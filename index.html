@@ -23,6 +23,7 @@
             padding: 20px;
             border-radius: 10px;
             border: 1px solid rgba(255, 165, 0, 0.3);
+            opacity: 0.6;
         }
 
         button {
@@ -104,6 +105,7 @@
             border: 1px solid rgba(255, 165, 0, 0.3);
             z-index: 100;
             max-width: 400px;
+            display: none; /* Hidden by default */
         }
 
         #textureInfo h4 {
@@ -118,6 +120,14 @@
 
         #textureInfo a:hover {
             text-decoration: underline;
+        }
+
+        #moreInfoButton {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 100;
+            opacity: 0.7;
         }
     </style>
 </head>
@@ -155,8 +165,9 @@
             <a href="https://science.nasa.gov/sun/" target="_blank">NASA</a> and
             <a href="https://www.esa.int/Science_Exploration/Space_Science/SOHO" target="_blank">SOHO</a>.
         </p>
-
     </div>
+
+    <button id="moreInfoButton">More Info</button>
 
     <div class="label3d" id="coreLabel">Core</div>
     <div class="label3d" id="radiativeLabel">Radiative Zone</div>
@@ -182,6 +193,7 @@
         let isTouching = false;
         let isDragging = false;
         let previousMouseX = 0, previousMouseY = 0;
+        let showTextureInfo = false;
 
         const layerInfo = {
             core: {
@@ -339,6 +351,7 @@
             document.getElementById('crossSection').addEventListener('click', toggleCrossSection);
             document.getElementById('rotateToggle').addEventListener('click', toggleRotation);
             document.getElementById('resetView').addEventListener('click', resetView);
+            document.getElementById('moreInfoButton').addEventListener('click', toggleTextureInfo);
 
             // Add click and touch handlers for labels
             const labelElements = document.querySelectorAll('.label3d');
@@ -453,6 +466,14 @@
             if (infoTimeout) {
                 clearTimeout(infoTimeout);
             }
+        }
+
+        function toggleTextureInfo() {
+            showTextureInfo = !showTextureInfo;
+            const textureInfo = document.getElementById('textureInfo');
+            const moreInfoButton = document.getElementById('moreInfoButton');
+            textureInfo.style.display = showTextureInfo ? 'block' : 'none';
+            moreInfoButton.classList.toggle('active', showTextureInfo);
         }
 
         function createSun() {
@@ -891,7 +912,7 @@
                 sunGroup.visible = true;
                 crossSectionGroup.visible = false;
                 camera.position.set(0, 0, 3);
-                isDragging = false; // Ensure dragging stops when exiting cross-section mode
+                isDragging = false;
             }
         }
 
